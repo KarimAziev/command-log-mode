@@ -46,37 +46,25 @@
 
 ;;; Code:
 
-(eval-when-compile (require 'cl))
+(require 'cl-lib)
 
 (defvar clm/log-text t
   "A non-nil setting means text will be saved to the command log.")
 
 (defvar clm/log-repeat nil
-  "A nil setting means repetitions of the same command are merged into the single log line.")
+  "Whether repetitions of the same command are not merged into the single log line.")
 
 (defvar clm/recent-history-string ""
   "This string will hold recently typed text.")
 
 (defun clm/recent-history ()
-  (setq clm/recent-history-string
-	(concat clm/recent-history-string
-		(buffer-substring-no-properties (- (point) 1) (point)))))
+	"Update `clm/recent-history-string'."
+	(setq clm/recent-history-string
+				(concat clm/recent-history-string
+								(buffer-substring-no-properties (- (point) 1)
+																								(point)))))
 
 (add-hook 'post-self-insert-hook 'clm/recent-history)
-
-(defun clm/zap-recent-history ()
-  (unless (or (member this-original-command
-		      clm/log-command-exceptions*)
-	      (eq this-original-command #'self-insert-command))
-    (setq clm/recent-history-string "")))
-
-(add-hook 'post-command-hook 'clm/zap-recent-history)
-
-(defvar clm/time-string "%Y-%m-%dT%H:%M:%S"
-  "The string sent to `format-time-string' when command time is logged.")
-
-(defvar clm/logging-dir "~/log/"
-  "Directory in which to store files containing logged commands.")
 
 (defvar clm/log-command-exceptions*
   '(nil self-insert-command backward-char forward-char
@@ -89,7 +77,24 @@
         handle-switch-frame
         newline previous-line next-line)
   "A list commands which should not be logged, despite logging being enabled.
-Frequently used non-interesting commands (like cursor movements) should be put here.")
+Frequently used non-interesting commands (like cursor movements) should
+be put here.")
+
+(defun clm/zap-recent-history ()
+	"Zap recent history."
+	(unless (or (member this-original-command
+											clm/log-command-exceptions*)
+							(eq this-original-command #'self-insert-command))
+    (setq clm/recent-history-string "")))
+
+(add-hook 'post-command-hook 'clm/zap-recent-history)
+
+(defvar clm/time-string "%Y-%m-%dT%H:%M:%S"
+  "The string sent to `format-time-string' when command time is logged.")
+
+(defvar clm/logging-dir "~/log/"
+  "Directory in which to store files containing logged commands.")
+
 
 (defvar clm/command-log-buffer nil
   "Reference of the currenly used buffer to display logged commands.")
@@ -103,7 +108,8 @@ Frequently used non-interesting commands (like cursor movements) should be put h
   "*Indentation of commands in command log buffer.")
 
 (defgroup command-log nil
-  "Customization for the command log.")
+	"Customization for the command log."
+	:group 'command-log)
 
 (defcustom command-log-mode-auto-show nil
   "Show the command-log window or frame automatically."
@@ -133,7 +139,7 @@ Frequently used non-interesting commands (like cursor movements) should be put h
   :type 'boolean)
 
 (defcustom command-log-mode-is-global nil
-  "Does turning on command-log-mode happen globally?"
+  "Does turning on `command-log-mode' happen globally?"
   :group 'command-log
   :type 'boolean)
 
@@ -151,34 +157,46 @@ Frequently used non-interesting commands (like cursor movements) should be put h
       ;; We can close the window though
       (clm/close-command-log-buffer)))
 
+;;;###autoload
+(define-minor-mode command-log-minibuffer-mode
+	"Toggle keyboard command logging in minibuffer."
+  :init-value nil
+  :lighter " cmd-mini-log"
+	:global t
+	(remove-hook 'minibuffer-setup-hook 'command-log-mode)
+	(when command-log-minibuffer-mode
+		(add-hook 'minibuffer-setup-hook 'command-log-mode)))
+
 (define-global-minor-mode global-command-log-mode command-log-mode
   command-log-mode)
 
 (defun clm/buffer-log-command-p (cmd &optional buffer)
-  "Determines whether keyboard command CMD should be logged.
-If non-nil, BUFFER specifies the buffer used to determine whether CMD should be logged.
+	"Return non-nil if keyboard command CMD should be logged.
+If non-nil, BUFFER specifies the buffer used to determine whether CMD
+should be logged.
 If BUFFER is nil, the current buffer is assumed."
-  (let ((val (if buffer
-		 (buffer-local-value command-log-mode buffer)
-	       command-log-mode)))
+	(let ((val (if buffer
+								 (buffer-local-value command-log-mode buffer)
+							 command-log-mode)))
     (and (not (null val))
-	 (null (member cmd clm/log-command-exceptions*)))))
+				 (null (member cmd clm/log-command-exceptions*)))))
 
 (defmacro clm/save-command-environment (&rest body)
-  (declare (indent 0))
-  `(let ((deactivate-mark nil) ; do not deactivate mark in transient
+	"Expand BODY in command environment."
+	(declare (indent 0))
+  `(let ((deactivate-mark nil)			 ; do not deactivate mark in transient
                                         ; mark mode
-	 ;; do not let random commands scribble over
-	 ;; {THIS,LAST}-COMMAND
-	 (this-command this-command)
-	 (last-command last-command))
+				 ;; do not let random commands scribble over
+				 ;; {THIS,LAST}-COMMAND
+				 (this-command this-command)
+				 (last-command last-command))
      ,@body))
 
 (defun clm/open-command-log-buffer (&optional arg)
-  "Opens (and creates, if non-existant) a buffer used for logging keyboard commands.
+	"Open (and create, if non-existant) a buffer used for logging keyboard commands.
 If ARG is Non-nil, the existing command log buffer is cleared."
-  (interactive "P")
-  (with-current-buffer 
+	(interactive "P")
+  (with-current-buffer
       (setq clm/command-log-buffer
             (get-buffer-create " *command-log*"))
     (text-scale-set 1))
@@ -202,70 +220,75 @@ If ARG is Non-nil, the existing command log buffer is cleared."
 
 ;;;###autoload
 (defun clm/toggle-command-log-buffer (&optional arg)
-  "Toggle the command log showing or not."
-  (interactive "P")
+	"Toggle the command log showing (with ARG) or not."
+	(interactive "P")
   (when (and command-log-mode-open-log-turns-on-mode
              (not command-log-mode))
     (if command-log-mode-is-global
         (global-command-log-mode)
-        (command-log-mode)))
+      (command-log-mode)))
   (with-current-buffer
       (setq clm/command-log-buffer
             (get-buffer-create " *command-log*"))
     (let ((win (get-buffer-window (current-buffer))))
       (if (windowp win)
           (clm/close-command-log-buffer)
-          ;; Else open the window
-          (clm/open-command-log-buffer arg)))))
+        ;; Else open the window
+        (clm/open-command-log-buffer arg)))))
 
 (defun clm/scroll-buffer-window (buffer &optional move-fn)
-  "Updates `point' of windows containing BUFFER according to MOVE-FN.
+	"Update `point' of windows containing BUFFER according to MOVE-FN.
 If non-nil, MOVE-FN is called on every window which displays BUFFER.
-If nil, MOVE-FN defaults to scrolling to the bottom, making the last line visible.
+If nil, MOVE-FN defaults to scrolling to the bottom, making the last
+line visible.
 
 Scrolling up can be accomplished with:
-\(clm/scroll-buffer-window buf (lambda () (goto-char (point-min))))
-"
-  (let ((selected (selected-window))
-	(point-mover (or move-fn
-			 (function (lambda () (goto-char (point-max)))))))
+\(clm/scroll-buffer-window buf (lambda () (goto-char (point-min))))."
+	(let ((selected (selected-window))
+				(point-mover (or move-fn
+												 (function (lambda ()
+																		 (goto-char (point-max)))))))
     (walk-windows (function (lambda (window)
-			      (when (eq (window-buffer window) buffer)
-				(select-window window)
-				(funcall point-mover)
-				(select-window selected))))
-		  nil t)))
+															(when (eq (window-buffer window) buffer)
+																(select-window window)
+																(funcall point-mover)
+																(select-window selected))))
+									nil t)))
 
 (defmacro clm/with-command-log-buffer (&rest body)
-  (declare (indent 0))
+	"Expand BODY in clm/command-log-buffer."
+	(declare (indent 0))
   `(when (and (not (null clm/command-log-buffer))
-	      (buffer-name clm/command-log-buffer))
+							(buffer-name clm/command-log-buffer))
      (with-current-buffer clm/command-log-buffer
        ,@body)))
 
 (defun clm/log-command (&optional cmd)
-  "Hook into `pre-command-hook' to intercept command activation."
-  (clm/save-command-environment
+	"Hook into `pre-command-hook' to intercept command CMD activation."
+	(clm/save-command-environment
     (setq cmd (or cmd this-command))
     (when (clm/buffer-log-command-p cmd)
       (clm/with-command-log-buffer
         (let ((current (current-buffer)))
           (goto-char (point-max))
-          (cond ((and (not clm/log-repeat) (eq cmd clm/last-keyboard-command))
-                 (incf clm/command-repetitions)
+          (cond ((and (not clm/log-repeat)
+											(eq cmd clm/last-keyboard-command))
+                 (cl-incf clm/command-repetitions)
                  (save-match-data
                    (when (and (> clm/command-repetitions 1)
-                              (search-backward "[" (line-beginning-position -1) t))
-                     (delete-region (point) (line-end-position))))
+                              (search-backward "[" (line-beginning-position -1)
+																							 t))
+                     (delete-region (point)
+																		(line-end-position))))
                  (backward-char) ; skip over either ?\newline or ?\space before ?\[
                  (insert " [")
                  (princ (1+ clm/command-repetitions) current)
                  (insert " times]"))
                 (t ;; (message "last cmd: %s cur: %s" last-command cmd)
                  ;; showing accumulated text with interleaved key presses isn't very useful
-		 (when (and clm/log-text (not clm/log-repeat))
-		   (if (eq clm/last-keyboard-command 'self-insert-command)
-		       (insert "[text: " clm/recent-history-string "]\n")))
+								 (when (and clm/log-text (not clm/log-repeat))
+									 (if (eq clm/last-keyboard-command 'self-insert-command)
+											 (insert "[text: " clm/recent-history-string "]\n")))
                  (setq clm/command-repetitions 0)
                  (insert
                   (propertize
@@ -286,14 +309,14 @@ Scrolling up can be accomplished with:
     (erase-buffer)))
 
 (defun clm/save-log-line (start end)
-  "Helper function for `clm/save-command-log' to export text properties."
-  (save-excursion
+	"Helper to export text properties between START and END."
+	(save-excursion
     (goto-char start)
     (let ((time (get-text-property (point) :time)))
       (if time
-	  (list (cons start (if time 
-				(concat "[" (get-text-property (point) :time) "] ")
-			      "")))))))
+					(list (cons start (if time
+																(concat "[" (get-text-property (point) :time) "] ")
+															"")))))))
 
 (defun clm/save-command-log ()
   "Save commands to today's log.
