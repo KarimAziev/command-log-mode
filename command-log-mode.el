@@ -203,10 +203,16 @@ If ARG is Non-nil, the existing command log buffer is cleared."
   (when arg
     (with-current-buffer clm/command-log-buffer
       (erase-buffer)))
-  (let ((new-win (split-window-horizontally
-                  (- 0 command-log-mode-window-size))))
-    (set-window-buffer new-win clm/command-log-buffer)
-    (set-window-dedicated-p new-win t)))
+  (if (minibuffer-selected-window)
+      (with-minibuffer-selected-window
+        (let ((new-win (split-window-horizontally
+                        (- 0 command-log-mode-window-size))))
+          (set-window-buffer new-win clm/command-log-buffer)
+          (set-window-dedicated-p new-win t)))
+    (let ((new-win (split-window-horizontally
+                    (- 0 command-log-mode-window-size))))
+      (set-window-buffer new-win clm/command-log-buffer)
+      (set-window-dedicated-p new-win t))))
 
 (defun clm/close-command-log-buffer ()
   "Close the command log window."
