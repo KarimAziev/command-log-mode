@@ -1,4 +1,4 @@
-;;; command-log-mode.el --- log keyboard commands to buffer
+;;; command-log-mode.el --- log keyboard commands to buffer -*- lexical-binding: t; -*-
 
 ;; homepage: https://github.com/lewang/command-log-mode
 
